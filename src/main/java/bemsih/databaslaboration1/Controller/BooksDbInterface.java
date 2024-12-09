@@ -12,10 +12,9 @@ public interface BooksDbInterface {
     List<Book> getBooksByGenre(String genreName) throws BooksDbException;
 
     // Rating operations
-    void addRating(int bookId, int userId, int ratingValue) throws BooksDbException;
+    void addRating(Book book, User user, int ratingValue) throws BooksDbException;
 
     // Book operations
-    void addBook(Book book) throws BooksDbException;
-    void addBookWithAuthors(Book book, List<Author> authors) throws BooksDbException;
+    void addBook(Book book, List<Genre> genres) throws BooksDbException;
+    void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres) throws BooksDbException;
 }
-
