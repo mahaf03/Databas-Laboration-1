@@ -52,4 +52,5 @@ public class Book {
     public void setISBN(Long ISBN) {
         this.ISBN = ISBN;
     }
+
 }

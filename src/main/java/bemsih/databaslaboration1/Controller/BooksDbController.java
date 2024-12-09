@@ -6,14 +6,11 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class BooksDbController implements BooksDbInterface{
+public class BooksDbController implements BooksDbInterface {
 
-    private final Connection connection;
-
-    public BooksDbController(Connection connection) {
-        this.connection = connection;
+    public BooksDbController() {
+        // Du kan ta bort connection-parameter i konstruktorn.
     }
-
     @Override
     public List<Book> getBooksByTitle(String title) throws BooksDbException {
         String query = "SELECT book_id, title, publishingDate, ISBN FROM BOOK WHERE title LIKE ?";
@@ -45,7 +42,6 @@ public class BooksDbController implements BooksDbInterface{
         return books;
     }
 
-
     @Override
     public List<Book> getBooksByAuthor(String authorName) throws BooksDbException {
         List<Book> books = new ArrayList<>();
@@ -57,7 +53,8 @@ public class BooksDbController implements BooksDbInterface{
         WHERE CONCAT(a.firstName, ' ', a.lastName) LIKE ?
         """;
 
-        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
             // Använd wildcard för att söka efter författarnamn som innehåller inputsträngen
             stmt.setString(1, "%" + authorName + "%");
 
@@ -81,18 +78,18 @@ public class BooksDbController implements BooksDbInterface{
         return books;
     }
 
-
     @Override
     public List<Book> getBooksByGenre(String genreName) throws BooksDbException {
         String query = """
-        SELECT b.book_id, b.title, b.publishingDate, b.ISBN
+        SELECT DISTINCT b.book_id, b.title, b.publishingDate, b.ISBN
         FROM BOOK b
         JOIN BOOK_GENRE bg ON b.book_id = bg.book_id
         JOIN GENRE g ON bg.genre_id = g.genre_id
         WHERE g.genreName LIKE ? """;
         List<Book> books = new ArrayList<>();
 
-        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, "%" + genreName + "%");
 
             try (ResultSet rs = stmt.executeQuery()) {
@@ -117,7 +114,8 @@ public class BooksDbController implements BooksDbInterface{
     public void addRating(Book book, User user, int ratingValue) throws BooksDbException {
         String query = "INSERT INTO RATING (book_id, user_id, rating_value) VALUES (?, ?, ?)";
 
-        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setInt(1, book.getBook_id());
             stmt.setInt(2, user.getUserId());
             stmt.setInt(3, ratingValue);
@@ -139,8 +137,9 @@ public class BooksDbController implements BooksDbInterface{
         String genreInsertQuery = "INSERT INTO GENRE(genreName) VALUES (?)";
         String bookGenreInsertQuery = "INSERT INTO BOOK_GENRE (book_id, genre_id) VALUES (?, ?)";
 
-        try (PreparedStatement bookStmt = connection.prepareStatement(bookInsertQuery, Statement.RETURN_GENERATED_KEYS);
-             PreparedStatement genreStmt = connection.prepareStatement(genreInsertQuery, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement bookStmt = conn.prepareStatement(bookInsertQuery, Statement.RETURN_GENERATED_KEYS);
+             PreparedStatement genreStmt = conn.prepareStatement(genreInsertQuery, Statement.RETURN_GENERATED_KEYS)) {
 
             // Lägg till boken
             bookStmt.setString(1, book.getTitle());
@@ -169,7 +168,7 @@ public class BooksDbController implements BooksDbInterface{
                     }
                 }
 
-                try (PreparedStatement bookGenreStmt = connection.prepareStatement(bookGenreInsertQuery)) {
+                try (PreparedStatement bookGenreStmt = conn.prepareStatement(bookGenreInsertQuery)) {
                     bookGenreStmt.setInt(1, book.getBook_id());
                     bookGenreStmt.setInt(2, genre.getGenreId());
                     bookGenreStmt.executeUpdate();
@@ -181,7 +180,6 @@ public class BooksDbController implements BooksDbInterface{
         }
     }
 
-
     @Override
     public void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres) throws BooksDbException {
         // Lägg till boken och genrer först
@@ -190,7 +188,8 @@ public class BooksDbController implements BooksDbInterface{
         String authorInsertQuery = "INSERT INTO AUTHOR(firstName, lastName, dateOfBirth) VALUES (?, ?, ?)";
         String bookAuthorInsertQuery = "INSERT INTO BOOK_AUTHOR (book_id, author_id) VALUES (?, ?)";
 
-        try (PreparedStatement authorStmt = connection.prepareStatement(authorInsertQuery, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement authorStmt = conn.prepareStatement(authorInsertQuery, Statement.RETURN_GENERATED_KEYS)) {
 
             // Lägg till författare och kopplingar
             for (Author author : authors) {
@@ -207,7 +206,7 @@ public class BooksDbController implements BooksDbInterface{
                     }
                 }
 
-                try (PreparedStatement bookAuthorStmt = connection.prepareStatement(bookAuthorInsertQuery)) {
+                try (PreparedStatement bookAuthorStmt = conn.prepareStatement(bookAuthorInsertQuery)) {
                     bookAuthorStmt.setInt(1, book.getBook_id());
                     bookAuthorStmt.setInt(2, author.getAuthor_id());
                     bookAuthorStmt.executeUpdate();
@@ -218,5 +217,4 @@ public class BooksDbController implements BooksDbInterface{
             throw new BooksDbException("Fel vid tillägg av författare för bok", e);
         }
     }
-
 }
