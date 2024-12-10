@@ -9,8 +9,10 @@ import java.util.List;
 public class BooksDbController implements BooksDbInterface {
 
     public BooksDbController() {
-        // Du kan ta bort connection-parameter i konstruktorn.
+
     }
+
+
     @Override
     public List<Book> getBooksByTitle(String title) throws BooksDbException {
         String query = "SELECT book_id, title, publishingDate, ISBN FROM BOOK WHERE title LIKE ?";
@@ -117,15 +119,13 @@ public class BooksDbController implements BooksDbInterface {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setInt(1, book.getBook_id());
-            stmt.setInt(2, user.getUserId());
+            stmt.setInt(2, user != null ? user.getUserId() : 1); // Använd en standardanvändare om null
             stmt.setInt(3, ratingValue);
 
             int rowsAffected = stmt.executeUpdate();
             if (rowsAffected == 0) {
                 throw new BooksDbException("Misslyckades att lägga till betyg. Ingen rad lades till.");
             }
-
-            System.out.println("Betyg tillagt framgångsrikt!");
         } catch (SQLException e) {
             throw new BooksDbException("Fel vid tillägg av betyg för bok ID: " + book.getBook_id(), e);
         }
@@ -179,7 +179,6 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Fel vid tillägg av bok och genrer", e);
         }
     }
-
     @Override
     public void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres) throws BooksDbException {
         // Lägg till boken och genrer först
@@ -189,15 +188,19 @@ public class BooksDbController implements BooksDbInterface {
         String bookAuthorInsertQuery = "INSERT INTO BOOK_AUTHOR (book_id, author_id) VALUES (?, ?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement authorStmt = conn.prepareStatement(authorInsertQuery, Statement.RETURN_GENERATED_KEYS)) {
+             PreparedStatement authorStmt = conn.prepareStatement(authorInsertQuery, Statement.RETURN_GENERATED_KEYS);
+             PreparedStatement bookAuthorStmt = conn.prepareStatement(bookAuthorInsertQuery)) {
 
-            // Lägg till författare och kopplingar
+            conn.setAutoCommit(false); // Start transaktion
+
             for (Author author : authors) {
+                // Lägg till författaren
                 authorStmt.setString(1, author.getFirstName());
                 authorStmt.setString(2, author.getLastName());
-                authorStmt.setDate(3, Date.valueOf(author.getDateOfBirth()));
+                authorStmt.setDate(3, author.getDateOfBirth() != null ? Date.valueOf(author.getDateOfBirth()) : null);
                 authorStmt.executeUpdate();
 
+                // Hämta det genererade ID:t för författaren
                 try (ResultSet generatedKeys = authorStmt.getGeneratedKeys()) {
                     if (generatedKeys.next()) {
                         author.setAuthor_id(generatedKeys.getInt(1));
@@ -206,15 +209,78 @@ public class BooksDbController implements BooksDbInterface {
                     }
                 }
 
-                try (PreparedStatement bookAuthorStmt = conn.prepareStatement(bookAuthorInsertQuery)) {
-                    bookAuthorStmt.setInt(1, book.getBook_id());
-                    bookAuthorStmt.setInt(2, author.getAuthor_id());
-                    bookAuthorStmt.executeUpdate();
-                }
+                // Lägg till relationen mellan boken och författaren
+                bookAuthorStmt.setInt(1, book.getBook_id());
+                bookAuthorStmt.setInt(2, author.getAuthor_id());
+                bookAuthorStmt.executeUpdate();
             }
 
+            conn.commit(); // Bekräfta transaktion
         } catch (SQLException e) {
-            throw new BooksDbException("Fel vid tillägg av författare för bok", e);
+            throw new BooksDbException("Fel vid tillägg av författare och relationer", e);
         }
     }
+
+    @Override
+    public User getUserById(int userId) throws BooksDbException {
+        String query = "SELECT user_id, userName, passWord FROM USER WHERE user_id = ?";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setInt(1, userId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new User(
+                            rs.getString("userName"),
+                            rs.getInt("user_id"),
+                            rs.getString("passWord")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            throw new BooksDbException("Kunde inte hämta användare med ID: " + userId, e);
+        }
+        return null;
+    }
+
+
+    @Override
+    public User getUserByUsername(String username) throws BooksDbException {
+        String query = "SELECT user_id, userName, passWord FROM USER WHERE userName = ?";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, username);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new User(
+                            rs.getString("userName"),
+                            rs.getInt("user_id"),
+                            rs.getString("passWord")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            throw new BooksDbException("Kunde inte hämta användare med användarnamn: " + username, e);
+        }
+        return null;
+    }
+
+
+    @Override
+    public boolean validateUser(String username, String password) throws BooksDbException {
+        String query = "SELECT COUNT(*) AS count FROM USER WHERE userName = ? AND passWord = ?";
+        try (Connection connection = DatabaseConnection.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, username);
+            stmt.setString(2, password);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("count") > 0;
+                }
+            }
+        } catch (SQLException e) {
+            throw new BooksDbException("Kunde inte validera användaren", e);
+        }
+        return false;
+    }
+
 }

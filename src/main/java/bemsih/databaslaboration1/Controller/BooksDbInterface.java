@@ -17,4 +17,7 @@ public interface BooksDbInterface {
     // Book operations
     void addBook(Book book, List<Genre> genres) throws BooksDbException;
     void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres) throws BooksDbException;
+    User getUserById(int userId) throws BooksDbException; // Hämta användare med ID
+    User getUserByUsername(String username) throws BooksDbException; // Hämta användare med användarnamn
+    boolean validateUser(String username, String password) throws BooksDbException; // Validera användaruppgifter
 }
