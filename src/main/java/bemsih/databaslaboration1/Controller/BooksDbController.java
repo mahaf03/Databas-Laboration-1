@@ -10,13 +10,28 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+/**
+ * Controller class for interacting with the Books database.
+ * Provides methods to fetch, add, and delete books, authors, genres, reviews, and users.
+ * This implementation uses a thread pool for asynchronous execution of tasks.
+ */
 public class BooksDbController implements BooksDbInterface {
 
     private final ExecutorService executorService;
-
+    /**
+     * Constructor that initializes the executor service with a cached thread pool.
+     */
     public BooksDbController() {
         this.executorService = Executors.newCachedThreadPool();
     }
+
+    /**
+     * Retrieves a list of books that match the given title.
+     *
+     * @param title The title to search for.
+     * @return A list of books matching the title.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
 
     @Override
     public List<Book> getBooksByTitle(String title) throws BooksDbException {
@@ -55,6 +70,14 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching books by title.", e);
         }
     }
+
+    /**
+     * Retrieves a list of books authored by a person with the given name.
+     *
+     * @param authorName The author's name to search for.
+     * @return A list of books by the given author.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
 
     @Override
     public List<Book> getBooksByAuthor(String authorName) throws BooksDbException {
@@ -98,6 +121,14 @@ public class BooksDbController implements BooksDbInterface {
         }
     }
 
+    /**
+     * Retrieves a list of books belonging to a specific genre.
+     *
+     * @param genreName The genre to search for.
+     * @return A list of books in the given genre.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
+
     @Override
     public List<Book> getBooksByGenre(String genreName) throws BooksDbException {
         Callable<List<Book>> task = () -> {
@@ -138,7 +169,14 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching books by genre.", e);
         }
     }
-
+    /**
+     * Adds a rating for a specific book by a user.
+     *
+     * @param book The book to rate.
+     * @param user The user adding the rating.
+     * @param ratingValue The rating value to assign.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public void addRating(Book book, User user, int ratingValue) throws BooksDbException {
         Callable<Void> task = () -> {
@@ -167,7 +205,14 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding rating.", e);
         }
     }
-
+    /**
+     * Adds a new book along with its genres.
+     *
+     * @param book The book to add.
+     * @param genres A list of genres associated with the book.
+     * @param user The user adding the book.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public void addBook(Book book, List<Genre> genres, User user) throws BooksDbException {
         Callable<Void> task = () -> {
@@ -224,7 +269,15 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding book.", e);
         }
     }
-
+    /**
+     * Adds a book with its authors and genres.
+     *
+     * @param book The book to add.
+     * @param authors A list of authors associated with the book.
+     * @param genres A list of genres associated with the book.
+     * @param user The user adding the book.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres, User user) throws BooksDbException {
         Callable<Void> task = () -> {
@@ -273,7 +326,13 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding book with authors.", e);
         }
     }
-
+    /**
+     * Retrieves a user by their ID.
+     *
+     * @param userId The ID of the user to fetch.
+     * @return The user object if found, or null if not.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public User getUserById(int userId) throws BooksDbException {
         Callable<User> task = () -> {
@@ -303,7 +362,13 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching user by ID.", e);
         }
     }
-
+    /**
+     * Retrieves a user by their username.
+     *
+     * @param username The username of the user to fetch.
+     * @return The user object if found, or null if not.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public User getUserByUsername(String username) throws BooksDbException {
         Callable<User> task = () -> {
@@ -333,7 +398,14 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching user by username.", e);
         }
     }
-
+    /**
+     * Validates a user's credentials.
+     *
+     * @param username The username to validate.
+     * @param password The password to validate.
+     * @return True if the credentials are valid, false otherwise.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public boolean validateUser(String username, String password) throws BooksDbException {
         Callable<Boolean> task = () -> {
@@ -360,7 +432,15 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for validating user.", e);
         }
     }
-
+    /**
+     * Adds a review for a book by a user, along with a rating.
+     *
+     * @param book The book being reviewed.
+     * @param user The user writing the review.
+     * @param reviewText The text of the review.
+     * @param ratingValue The rating value associated with the review.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     @Override
     public void addReview(Book book, User user, String reviewText, int ratingValue) throws BooksDbException {
         Callable<Void> task = () -> {
@@ -408,6 +488,12 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding review.", e);
         }
     }
+    /**
+     * Deletes a book and all associated data (reviews, ratings, authors, genres) by its ID.
+     *
+     * @param bookId The ID of the book to delete.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
     public void deleteBookById(int bookId) throws BooksDbException {
         Callable<Void> task = () -> {
             String deleteReviewsQuery = "DELETE FROM REVIEW WHERE book_id = ?";
@@ -469,8 +555,13 @@ public class BooksDbController implements BooksDbInterface {
         }
     }
 
-
-
+    /**
+     * Retrieves a list of reviews for a book by its ID.
+     *
+     * @param bookId The ID of the book.
+     * @return A list of reviews associated with the book.
+     * @throws BooksDbException If an error occurs during database interaction.
+     */
 
     @Override
     public List<Review> getReviewsByBookId(int bookId) throws BooksDbException {
@@ -535,7 +626,9 @@ public class BooksDbController implements BooksDbInterface {
     }
 
 
-
+    /**
+     * Shuts down the executor service used for background tasks.
+     */
 
     public void shutdown() {
         executorService.shutdown();
