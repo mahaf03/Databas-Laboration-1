@@ -15,9 +15,13 @@ public interface BooksDbInterface {
     void addRating(Book book, User user, int ratingValue) throws BooksDbException;
 
     // Book operations
-    void addBook(Book book, List<Genre> genres) throws BooksDbException;
-    void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres) throws BooksDbException;
+    void addBook(Book book, List<Genre> genres, User user) throws BooksDbException;
+    void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres, User user) throws BooksDbException;
     User getUserById(int userId) throws BooksDbException; // Hämta användare med ID
     User getUserByUsername(String username) throws BooksDbException; // Hämta användare med användarnamn
     boolean validateUser(String username, String password) throws BooksDbException; // Validera användaruppgifter
+    public void addReview(Book book, User user, String reviewText, int ratingValue) throws BooksDbException;
+    public void deleteBookById(int bookId) throws BooksDbException;
+    List<Review> getReviewsByBookId(int bookId) throws BooksDbException;
+
 }

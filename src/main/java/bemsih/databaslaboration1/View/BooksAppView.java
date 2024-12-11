@@ -20,12 +20,12 @@ public class BooksAppView extends Application {
     private TableView<Book> tableView;
     private User loggedInUser;
 
-
     @Override
     public void start(Stage primaryStage) {
         try (Connection connection = DatabaseConnection.getConnection()) {
             this.controller = new BooksDbController();
             this.tableView = new TableView<>();
+
             // Skapa UI-komponenter
             TextField searchField = new TextField();
             searchField.setPromptText("Sök efter böcker");
@@ -37,23 +37,45 @@ public class BooksAppView extends Application {
             Button searchButton = new Button("Sök");
             Button addBookButton = new Button("Lägg till bok");
             Button addRatingButton = new Button("Lägg till betyg");
-
+            Button addReviewButton = new Button("Lägg till recension");
+            Button reviewButton = new Button("Visa recension");
+            Button deleteBookButton = new Button("Radera bok");
+            Button loginButton = new Button("Logga in");
+            Button logoutButton = new Button("Logga ut");
 
             TableColumn<Book, String> titleColumn = new TableColumn<>("Titel");
             titleColumn.setCellValueFactory(param ->
                     new SimpleStringProperty(param.getValue().getTitle())); // Använd getter-metod för titel
 
-
-
             tableView.getColumns().addAll(titleColumn);
 
-            // Layout för sökfält, combobox och knappar
+            // Layout för sökfält och knappar
             HBox searchBox = new HBox(10, searchField, searchTypeComboBox, searchButton);
-            VBox vBox = new VBox(10, searchBox, addBookButton, addRatingButton, tableView);
-            vBox.setPrefWidth(600);
-            vBox.setPrefHeight(400);
+            HBox actionButtons = new HBox(10, loginButton, logoutButton, addBookButton, addRatingButton, addReviewButton, reviewButton, deleteBookButton);
+            VBox vBox = new VBox(10, searchBox, actionButtons, tableView);
+            vBox.setPrefWidth(800);
+            vBox.setPrefHeight(600);
 
-            // Sökfunktion
+            reviewButton.setOnAction(e -> {
+                Book selectedBook = tableView.getSelectionModel().getSelectedItem();
+                if (selectedBook == null) {
+                    showAlert("Fel", "Ingen bok vald", "Välj en bok för att visa recensioner.");
+                    return;
+                }
+
+                try {
+                    List<Review> reviews = controller.getReviewsByBookId(selectedBook.getBook_id());
+                    if (reviews.isEmpty()) {
+                        showAlert("Info", "Inga recensioner", "Den valda boken har inga recensioner.");
+                    } else {
+                        showReviewsDialog(reviews);
+                    }
+                } catch (BooksDbException ex) {
+                    showAlert("Fel", "Misslyckades att hämta recensioner", ex.getMessage());
+                }
+            });
+
+            // Event-handler för knappar
             searchButton.setOnAction(e -> {
                 String query = searchField.getText();
                 String selectedSearchType = searchTypeComboBox.getValue();
@@ -80,11 +102,27 @@ public class BooksAppView extends Application {
                 }
             });
 
-            // Lägg till bok (använd Dialog)
-            addBookButton.setOnAction(e -> showAddBookDialog());
+            loginButton.setOnAction(e -> showLoginDialog());
 
-            // Lägg till betyg (ytterligare funktionalitet behövs här)
+            logoutButton.setOnAction(e -> {
+                loggedInUser = null; // Nollställ den inloggade användaren
+                showAlert("Success", "Utloggning lyckades", "Du är nu utloggad.");
+            });
+
+            addBookButton.setOnAction(e -> {
+                if (loggedInUser == null) {
+                    showAlert("Fel", "Ingen användare inloggad", "Du måste logga in för att lägga till böcker.");
+                } else {
+                    showAddBookDialog();
+                }
+            });
+
             addRatingButton.setOnAction(e -> showAddRatingDialog());
+            addReviewButton.setOnAction(e -> showAddReviewDialog());
+
+            // Radera bok-knappens event-handler
+            deleteBookButton.setOnAction(e -> deleteSelectedBook());
+
 
             // Visa scenen
             Scene scene = new Scene(vBox);
@@ -95,6 +133,45 @@ public class BooksAppView extends Application {
             showAlert("Fel", "Databasanslutning misslyckades", e.getMessage());
         }
     }
+
+
+    private void deleteSelectedBook() {
+        Book selectedBook = tableView.getSelectionModel().getSelectedItem();
+        if (selectedBook == null) {
+            showAlert("Fel", "Ingen bok vald", "Välj en bok att radera.");
+            return;
+        }
+
+        if (loggedInUser == null) {
+            showAlert("Fel", "Ingen användare inloggad", "Du måste logga in för att radera böcker.");
+            return;
+        }
+
+        Alert confirmationAlert = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmationAlert.setTitle("Bekräfta radering");
+        confirmationAlert.setHeaderText("Är du säker på att du vill radera boken?");
+        confirmationAlert.setContentText("Bok: " + selectedBook.getTitle());
+
+        confirmationAlert.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                try {
+                    controller.deleteBookById(selectedBook.getBook_id());
+
+                    // Uppdatera tabellen
+                    tableView.getItems().remove(selectedBook);
+                    tableView.refresh();
+
+                    showAlert("Success", "Bok raderad", "Boken har raderats.");
+                } catch (BooksDbException e) {
+                    e.printStackTrace(); // För att se detaljer i konsolen
+                    showAlert("Fel", "Misslyckades att radera bok", e.getMessage());
+                }
+            }
+        });
+    }
+
+
+
 
     private void showAddBookDialog() {
         Dialog<ButtonType> dialog = new Dialog<>();
@@ -171,12 +248,7 @@ public class BooksAppView extends Application {
                     List<Author> authors = new ArrayList<>();
                     authors.add(new Author(0, firstName, lastName, dob));
                     authors.addAll(additionalAuthors);
-
-                    controller.addBookWithAuthors(
-                            new Book(0, title, publishDate, Long.parseLong(isbn)),
-                            authors,
-                            List.of(new Genre(0, genre))
-                    );
+                    controller.addBookWithAuthors( new Book(0, title, publishDate, Long.parseLong(isbn)), authors, List.of(new Genre(0, genre)), loggedInUser);
                     showAlert("Success", "Bok tillagd", "Boken har lagts till.");
                 } catch (BooksDbException e) {
                     showAlert("Fel", "Bok kunde inte läggas till", e.getMessage());
@@ -239,11 +311,8 @@ public class BooksAppView extends Application {
     private void showAddRatingDialog() {
         // Kontrollera om användaren är inloggad
         if (loggedInUser == null) {
-            showLoginDialog();
-            if (loggedInUser == null) {
-                showAlert("Fel", "Ingen användare inloggad", "Du måste logga in för att lägga till ett betyg.");
-                return;
-            }
+            showAlert("Fel", "Ingen användare inloggad", "Du måste logga in för att lägga till ett betyg.");
+            return;
         }
 
         // Kontrollera om en bok är vald från tabellen
@@ -278,6 +347,7 @@ public class BooksAppView extends Application {
             }
         });
     }
+
     private void showLoginDialog() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Logga in");
@@ -322,8 +392,94 @@ public class BooksAppView extends Application {
 
         dialog.showAndWait();
     }
+    private void showReviewsDialog(List<Review> reviews) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Recensioner");
+        dialog.setHeaderText("Recensioner för boken");
+
+        VBox vBox = new VBox(10);
+        for (Review review : reviews) {
+            Label userLabel = new Label("Användare: " + review.getUser().getUserName());
+            Label dateLabel = new Label("Datum: " + review.getReviewDate().toString());
+            Label ratingLabel = new Label("Betyg: " + review.getRatingId());
+            Label reviewTextLabel = new Label("Recension: " + review.getReviewText());
+            vBox.getChildren().addAll(userLabel, dateLabel, ratingLabel, reviewTextLabel, new Separator());
+        }
+
+        dialog.getDialogPane().setContent(vBox);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
+        dialog.showAndWait();
+    }
 
 
+    private void showAddReviewDialog() {
+        // Kontrollera om användaren är inloggad
+        if (loggedInUser == null) {
+            showAlert("Fel", "Ingen användare inloggad", "Du måste logga in för att skriva en recension.");
+            return;
+        }
+
+        // Kontrollera om en bok är vald från tabellen
+        Book selectedBook = tableView.getSelectionModel().getSelectedItem();
+        if (selectedBook == null) {
+            showAlert("Fel", "Ingen bok vald", "Välj en bok att recensera.");
+            return;
+        }
+
+        // Skapa dialogfönster för att skriva recension och ange betyg
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Lägg till recension");
+        dialog.setHeaderText("Skriv din recension och ange ett betyg");
+
+        TextArea reviewTextArea = new TextArea();
+        reviewTextArea.setPromptText("Skriv din recension här...");
+
+        TextField ratingField = new TextField();
+        ratingField.setPromptText("Betyg (1-5)");
+
+        VBox vBox = new VBox(10, reviewTextArea, ratingField);
+        dialog.getDialogPane().setContent(vBox);
+
+        ButtonType okButton = new ButtonType("Lägg till", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancelButton = new ButtonType("Avbryt", ButtonBar.ButtonData.CANCEL_CLOSE);
+        dialog.getDialogPane().getButtonTypes().addAll(okButton, cancelButton);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == okButton) {
+                String reviewText = reviewTextArea.getText();
+                String ratingInput = ratingField.getText();
+
+                // Validera inmatning
+                if (reviewText.isEmpty() || ratingInput.isEmpty()) {
+                    showAlert("Fel", "Ogiltiga detaljer", "Alla fält måste fyllas i.");
+                    return null;
+                }
+
+                int ratingValue;
+                try {
+                    ratingValue = Integer.parseInt(ratingInput);
+                    if (ratingValue < 1 || ratingValue > 5) {
+                        showAlert("Fel", "Ogiltigt betyg", "Betyget ska vara mellan 1 och 5.");
+                        return null;
+                    }
+                } catch (NumberFormatException ex) {
+                    showAlert("Fel", "Ogiltigt betyg", "Ange ett giltigt heltal.");
+                    return null;
+                }
+
+                // Lägg till recension och betyg i databasen
+                try {
+                    controller.addReview(selectedBook, loggedInUser, reviewText, ratingValue);
+                    showAlert("Success", "Recension tillagd", "Recensionen har lagts till för boken.");
+                } catch (BooksDbException e) {
+                    showAlert("Fel", "Recension kunde inte sparas", e.getMessage());
+                }
+            }
+            return null;
+        });
+
+        dialog.showAndWait();
+    }
 
 
     private void showAlert(String title, String header, String content) {
