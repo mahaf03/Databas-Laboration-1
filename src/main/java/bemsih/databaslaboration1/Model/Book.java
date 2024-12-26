@@ -1,34 +1,34 @@
 package bemsih.databaslaboration1.Model;
 
-import java.time.LocalDate;
-import java.util.ArrayList;
+import org.bson.types.ObjectId;
 
-/**
- * Represents a book with details such as book ID, title, publication date, ISBN, authors, and genres.
- */
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Date;
+
 public class Book {
-    private int book_id; // Unique identifier for the book
+    private ObjectId bookId; // Unique identifier for the book
     private String title; // Title of the book
-    private LocalDate date; // Publication date of the book
+    private Date publicationDate; // Publication date of the book
     private Long ISBN; // ISBN number of the book
-    private ArrayList<Author> authors; // List of authors who wrote the book
-    private ArrayList<Genre> genres; // List of genres the book belongs to
+    private ArrayList<ObjectId> authorIds; // List of author IDs
+    private ArrayList<ObjectId> genreIds; // List of genre IDs
 
     /**
      * Constructor for creating a new Book instance.
      *
-     * @param book_id Unique identifier for the book.
      * @param title Title of the book.
-     * @param date Publication date of the book.
-     * @param ISBN ISBNnumber of the book.
+     * @param publicationDate Publication date of the book.
+     * @param ISBN ISBN number of the book.
      */
-    public Book(int book_id, String title, LocalDate date, Long ISBN) {
-        this.book_id = book_id;
+    public Book(String title, LocalDate publicationDate, Long ISBN) {
+        this.bookId = new ObjectId(); // Generate a new ObjectId
         this.title = title;
-        this.date = date;
+        this.publicationDate = Date.from(publicationDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
         this.ISBN = ISBN;
-        this.authors = new ArrayList<>();
-        this.genres = new ArrayList<>();
+        this.authorIds = new ArrayList<>();
+        this.genreIds = new ArrayList<>();
     }
 
     /**
@@ -36,17 +36,17 @@ public class Book {
      *
      * @return The book ID.
      */
-    public int getBook_id() {
-        return book_id;
+    public String getBookId() {
+        return bookId.toHexString();
     }
 
     /**
      * Sets the unique identifier of the book.
      *
-     * @param book_id The book ID to set.
+     * @param bookId The book ID to set.
      */
-    public void setBook_id(int book_id) {
-        this.book_id = book_id;
+    public void setBookId(ObjectId bookId) {
+        this.bookId = bookId;
     }
 
     /**
@@ -72,17 +72,17 @@ public class Book {
      *
      * @return The publication date of the book.
      */
-    public LocalDate getDate() {
-        return date;
+    public LocalDate getPublicationDate() {
+        return publicationDate.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
     }
 
     /**
      * Sets the publication date of the book.
      *
-     * @param date The publication date to set.
+     * @param publicationDate The publication date to set.
      */
-    public void setDate(LocalDate date) {
-        this.date = date;
+    public void setPublicationDate(LocalDate publicationDate) {
+        this.publicationDate = Date.from(publicationDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
     }
 
     /**
@@ -101,5 +101,71 @@ public class Book {
      */
     public void setISBN(Long ISBN) {
         this.ISBN = ISBN;
+    }
+
+    /**
+     * Gets the list of author IDs associated with the book.
+     *
+     * @return A list of author IDs.
+     */
+    public ArrayList<ObjectId> getAuthorIds() {
+        return authorIds;
+    }
+
+    /**
+     * Sets the list of author IDs associated with the book.
+     *
+     * @param authorIds The list of author IDs to set.
+     */
+    public void setAuthorIds(ArrayList<ObjectId> authorIds) {
+        this.authorIds = authorIds;
+    }
+
+    /**
+     * Gets the list of genre IDs associated with the book.
+     *
+     * @return A list of genre IDs.
+     */
+    public ArrayList<ObjectId> getGenreIds() {
+        return genreIds;
+    }
+
+    /**
+     * Sets the list of genre IDs associated with the book.
+     *
+     * @param genreIds The list of genre IDs to set.
+     */
+    public void setGenreIds(ArrayList<ObjectId> genreIds) {
+        this.genreIds = genreIds;
+    }
+
+    /**
+     * Adds an author ID to the book.
+     *
+     * @param authorId The author ID to add.
+     */
+    public void addAuthorId(ObjectId authorId) {
+        this.authorIds.add(authorId);
+    }
+
+    /**
+     * Adds a genre ID to the book.
+     *
+     * @param genreId The genre ID to add.
+     */
+    public void addGenreId(ObjectId genreId) {
+        this.genreIds.add(genreId);
+    }
+
+    @Override
+    public String toString() {
+        return "Book{" +
+                "bookId=" + bookId +
+                ", title='" + title + '\'' +
+                ", publicationDate=" + publicationDate +
+                ", ISBN=" + ISBN +
+                ", authorIds=" + authorIds +
+                ", genreIds=" + genreIds +
+                '}';
     }
 }

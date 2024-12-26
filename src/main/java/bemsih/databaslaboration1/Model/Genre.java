@@ -1,25 +1,23 @@
 package bemsih.databaslaboration1.Model;
 
+import org.bson.types.ObjectId;
+
 import java.util.ArrayList;
 
-/**
- * Represents a genre that groups books sharing similar characteristics or themes.
- */
 public class Genre {
-    private int genreId; // Unique identifier for the genre
+    private ObjectId genreId; // Unique identifier for the genre
     private String genreName; // Name of the genre
-    private ArrayList<Book> books; // List of books associated with the genre
+    private ArrayList<ObjectId> bookIds; // List of book IDs associated with the genre
 
     /**
      * Constructor for creating a new Genre instance.
      *
-     * @param genreId Unique identifier for the genre.
      * @param genreName Name of the genre.
      */
-    public Genre(int genreId, String genreName) {
-        this.genreId = genreId;
+    public Genre(String genreName) {
+        this.genreId = new ObjectId(); // Generate a new ObjectId
         this.genreName = genreName;
-        this.books = new ArrayList<>();
+        this.bookIds = new ArrayList<>();
     }
 
     /**
@@ -27,7 +25,7 @@ public class Genre {
      *
      * @return The genre ID.
      */
-    public int getGenreId() {
+    public ObjectId getGenreId() {
         return genreId;
     }
 
@@ -36,7 +34,7 @@ public class Genre {
      *
      * @param genreId The genre ID to set.
      */
-    public void setGenreId(int genreId) {
+    public void setGenreId(ObjectId genreId) {
         this.genreId = genreId;
     }
 
@@ -59,20 +57,38 @@ public class Genre {
     }
 
     /**
-     * Gets the list of books associated with the genre.
+     * Gets the list of book IDs associated with the genre.
      *
-     * @return A list of books belonging to the genre.
+     * @return A list of book IDs belonging to the genre.
      */
-    public ArrayList<Book> getBooks() {
-        return books;
+    public ArrayList<ObjectId> getBookIds() {
+        return bookIds;
     }
 
     /**
-     * Sets the list of books associated with the genre.
+     * Sets the list of book IDs associated with the genre.
      *
-     * @param books The list of books to set.
+     * @param bookIds The list of book IDs to set.
      */
-    public void setBooks(ArrayList<Book> books) {
-        this.books = books;
+    public void setBookIds(ArrayList<ObjectId> bookIds) {
+        this.bookIds = bookIds;
+    }
+
+    /**
+     * Adds a book ID to the genre.
+     *
+     * @param bookId The book ID to add.
+     */
+    public void addBookId(ObjectId bookId) {
+        this.bookIds.add(bookId);
+    }
+
+    @Override
+    public String toString() {
+        return "Genre{" +
+                "genreId=" + genreId +
+                ", genreName='" + genreName + '\'' +
+                ", bookIds=" + bookIds +
+                '}';
     }
 }

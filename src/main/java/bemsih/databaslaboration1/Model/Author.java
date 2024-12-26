@@ -1,50 +1,50 @@
 package bemsih.databaslaboration1.Model;
 
-import java.time.LocalDate;
-import java.util.ArrayList;
+import org.bson.types.ObjectId;
 
-/**
- * Represents an author with personal details and their associated books.
- */
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Date;
+
 public class Author {
-    private int author_id;
-    private final String firstName;
-    private final String lastName;
-    private final LocalDate dateOfBirth;
-    private ArrayList<Book> books;
+    private ObjectId authorId; // Unique identifier for the author
+    private String firstName; // First name of the author
+    private String lastName; // Last name of the author
+    private Date dateOfBirth; // Birthdate of the author
+    private ArrayList<ObjectId> bookIds; // List of book IDs written by the author
 
     /**
      * Constructs an Author with the specified details.
      *
-     * @param author_id  the unique identifier for the author
      * @param firstName  the first name of the author
      * @param lastName   the last name of the author
      * @param dateOfBirth the birthdate of the author
      */
-    public Author(int author_id, String firstName, String lastName, LocalDate dateOfBirth) {
-        this.author_id = author_id;
+    public Author(String firstName, String lastName, LocalDate dateOfBirth) {
+        this.authorId = new ObjectId(); // Generate a new ObjectId
         this.firstName = firstName;
         this.lastName = lastName;
-        this.dateOfBirth = dateOfBirth;
-        this.books = new ArrayList<>();
+        this.dateOfBirth = Date.from(dateOfBirth.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        this.bookIds = new ArrayList<>();
     }
 
     /**
-     * Gets the date of birth of the author.
+     * Gets the unique identifier of the author.
      *
-     * @return the author's date of birth
+     * @return the author's ID
      */
-    public LocalDate getDateOfBirth() {
-        return dateOfBirth;
+    public ObjectId getAuthorId() {
+        return authorId;
     }
 
     /**
-     * Gets the last name of the author.
+     * Sets the unique identifier of the author.
      *
-     * @return the author's last name
+     * @param authorId the new ID for the author
      */
-    public String getLastName() {
-        return lastName;
+    public void setAuthorId(ObjectId authorId) {
+        this.authorId = authorId;
     }
 
     /**
@@ -57,38 +57,85 @@ public class Author {
     }
 
     /**
-     * Gets the unique identifier of the author.
+     * Sets the first name of the author.
      *
-     * @return the author's ID
+     * @param firstName the first name to set
      */
-    public int getAuthor_id() {
-        return author_id;
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
     }
 
     /**
-     * Sets the unique identifier of the author.
+     * Gets the last name of the author.
      *
-     * @param author_id the new ID for the author
+     * @return the author's last name
      */
-    public void setAuthor_id(int author_id) {
-        this.author_id = author_id;
+    public String getLastName() {
+        return lastName;
     }
 
     /**
-     * Gets the list of books written by the author.
+     * Sets the last name of the author.
      *
-     * @return a list of the author's books
+     * @param lastName the last name to set
      */
-    public ArrayList<Book> getBooks() {
-        return books;
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
     }
 
     /**
-     * Sets the list of books associated with the author.
+     * Gets the birthdate of the author.
      *
-     * @param books a list of books to associate with the author
+     * @return the author's birthdate
      */
-    public void setBooks(ArrayList<Book> books) {
-        this.books = books;
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
+    }
+
+    /**
+     * Sets the birthdate of the author.
+     *
+     * @param dateOfBirth the birthdate to set
+     */
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = Date.from(dateOfBirth.atStartOfDay(ZoneId.systemDefault()).toInstant());
+    }
+
+    /**
+     * Gets the list of book IDs written by the author.
+     *
+     * @return a list of book IDs
+     */
+    public ArrayList<ObjectId> getBookIds() {
+        return bookIds;
+    }
+
+    /**
+     * Sets the list of book IDs written by the author.
+     *
+     * @param bookIds the list of book IDs to set
+     */
+    public void setBookIds(ArrayList<ObjectId> bookIds) {
+        this.bookIds = bookIds;
+    }
+
+    /**
+     * Adds a book ID to the author's list of books.
+     *
+     * @param bookId the book ID to add
+     */
+    public void addBookId(ObjectId bookId) {
+        this.bookIds.add(bookId);
+    }
+
+    @Override
+    public String toString() {
+        return "Author{" +
+                "authorId=" + authorId +
+                ", firstName='" + firstName + '\'' +
+                ", lastName='" + lastName + '\'' +
+                ", dateOfBirth=" + dateOfBirth +
+                ", bookIds=" + bookIds +
+                '}';
     }
 }

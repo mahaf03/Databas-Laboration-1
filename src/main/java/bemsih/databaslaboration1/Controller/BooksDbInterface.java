@@ -1,6 +1,7 @@
 package bemsih.databaslaboration1.Controller;
 
 import bemsih.databaslaboration1.Model.*;
+import org.bson.types.ObjectId;
 
 import java.util.List;
 
@@ -11,7 +12,9 @@ import java.util.List;
  */
 public interface BooksDbInterface {
 
+    public void initializeDefaultUser() throws BooksDbException;
     // Search operations
+    public String getUserNameById(ObjectId userId) throws BooksDbException;
 
     /**
      * Retrieves a list of books based on their title.
@@ -20,6 +23,7 @@ public interface BooksDbInterface {
      * @return a list of books that match the given title.
      * @throws BooksDbException if an error occurs during the operation.
      */
+
     List<Book> getBooksByTitle(String title) throws BooksDbException;
 
     /**
@@ -120,7 +124,8 @@ public interface BooksDbInterface {
      * @param bookId the ID of the book to delete.
      * @throws BooksDbException if an error occurs during the operation.
      */
-    void deleteBookById(int bookId) throws BooksDbException;
+    void deleteBookById(String bookId) throws BooksDbException;
+
 
     /**
      * Retrieves a list of reviews for a specific book by its ID.
@@ -129,5 +134,5 @@ public interface BooksDbInterface {
      * @return a list of reviews for the specified book.
      * @throws BooksDbException if an error occurs during the operation.
      */
-    List<Review> getReviewsByBookId(int bookId) throws BooksDbException;
+    List<Review> getReviewsByBookId(String bookId) throws BooksDbException;
 }

@@ -1,98 +1,76 @@
 package bemsih.databaslaboration1.Model;
 
-/**
- * Represents a rating given by a user for a specific book.
- */
+import org.bson.types.ObjectId;
+
 public class Rating {
-    private int ratingId; // Unique identifier for the rating
-    private Book book; // The book being rated
-    private User user; // The user who gave the rating
+    private ObjectId ratingId; // Unique identifier for the rating
+    private ObjectId bookId; // Reference to the book being rated
+    private ObjectId userId; // Reference to the user who gave the rating
     private int ratingValue; // The value of the rating (e.g., 1-5)
 
     /**
      * Constructor for creating a new Rating instance.
      *
-     * @param ratingId Unique identifier for the rating.
      * @param ratingValue Value of the rating (e.g., 1-5).
-     * @param user The user who gave the rating.
-     * @param book The book being rated.
+     * @param userId The user who gave the rating.
+     * @param bookId The book being rated.
      */
-    public Rating(int ratingId, int ratingValue, User user, Book book) {
-        this.ratingId = ratingId;
+    public Rating(int ratingValue, ObjectId userId, ObjectId bookId) {
+        if (ratingValue < 1 || ratingValue > 5) {
+            throw new IllegalArgumentException("Rating value must be between 1 and 5.");
+        }
+        this.ratingId = new ObjectId(); // Generate a new ObjectId
         this.ratingValue = ratingValue;
-        this.user = user;
-        this.book = book;
+        this.userId = userId;
+        this.bookId = bookId;
     }
 
-    /**
-     * Gets the unique identifier of the rating.
-     *
-     * @return The rating ID.
-     */
-    public int getRatingId() {
+    // Getter and Setter for ratingId
+    public ObjectId getRatingId() {
         return ratingId;
     }
 
-    /**
-     * Sets the unique identifier of the rating.
-     *
-     * @param ratingId The rating ID to set.
-     */
-    public void setRatingId(int ratingId) {
+    public void setRatingId(ObjectId ratingId) {
         this.ratingId = ratingId;
     }
 
-    /**
-     * Gets the value of the rating.
-     *
-     * @return The rating value.
-     */
+    // Getter and Setter for ratingValue
     public int getRatingValue() {
         return ratingValue;
     }
 
-    /**
-     * Sets the value of the rating.
-     *
-     * @param ratingValue The rating value to set (e.g., 1-5).
-     */
     public void setRatingValue(int ratingValue) {
+        if (ratingValue < 1 || ratingValue > 5) {
+            throw new IllegalArgumentException("Rating value must be between 1 and 5.");
+        }
         this.ratingValue = ratingValue;
     }
 
-    /**
-     * Gets the book associated with the rating.
-     *
-     * @return The book being rated.
-     */
-    public Book getBook() {
-        return book;
+    // Getter and Setter for bookId
+    public ObjectId getBookId() {
+        return bookId;
     }
 
-    /**
-     * Sets the book associated with the rating.
-     *
-     * @param book The book to associate with the rating.
-     */
-    public void setBook(Book book) {
-        this.book = book;
+    public void setBookId(ObjectId bookId) {
+        this.bookId = bookId;
     }
 
-    /**
-     * Gets the user who gave the rating.
-     *
-     * @return The user who provided the rating.
-     */
-    public User getUser() {
-        return user;
+    // Getter and Setter for userId
+    public ObjectId getUserId() {
+        return userId;
     }
 
-    /**
-     * Sets the user who gave the rating.
-     *
-     * @param user The user to associate with the rating.
-     */
-    public void setUser(User user) {
-        this.user = user;
+    public void setUserId(ObjectId userId) {
+        this.userId = userId;
+    }
+
+    @Override
+    public String toString() {
+        return "Rating{" +
+                "ratingId=" + ratingId +
+                ", bookId=" + bookId +
+                ", userId=" + userId +
+                ", ratingValue=" + ratingValue +
+                '}';
     }
 }

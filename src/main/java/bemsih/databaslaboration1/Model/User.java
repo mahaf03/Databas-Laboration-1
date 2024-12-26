@@ -1,10 +1,9 @@
 package bemsih.databaslaboration1.Model;
 
-/**
- * Represents a user in the system, with a username, ID, and password.
- */
+import org.bson.types.ObjectId;
+
 public class User {
-    private int userId; // Unique identifier for the user
+    private ObjectId userId; // MongoDB ObjectId
     private String userName; // Username of the user
     private final String password; // Password for the user (immutable)
 
@@ -12,12 +11,11 @@ public class User {
      * Constructor for creating a new User instance.
      *
      * @param userName The username of the user.
-     * @param userId Unique identifier for the user.
      * @param password The user's password.
      */
-    public User(String userName, int userId, String password) {
+    public User(String userName, String password) {
+        this.userId = new ObjectId(); // Generate a new ObjectId
         this.userName = userName;
-        this.userId = userId;
         this.password = password;
     }
 
@@ -26,7 +24,7 @@ public class User {
      *
      * @return The user ID.
      */
-    public int getUserId() {
+    public ObjectId getUserId() {
         return userId;
     }
 
@@ -35,7 +33,7 @@ public class User {
      *
      * @param userId The user ID to set.
      */
-    public void setUserId(int userId) {
+    public void setUserId(ObjectId userId) {
         this.userId = userId;
     }
 
@@ -65,5 +63,14 @@ public class User {
      */
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    @Override
+    public String toString() {
+        return "User{" +
+                "userId=" + userId +
+                ", userName='" + userName + '\'' +
+                ", password='" + password + '\'' +
+                '}';
     }
 }

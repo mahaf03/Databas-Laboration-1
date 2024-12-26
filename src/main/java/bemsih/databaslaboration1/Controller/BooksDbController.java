@@ -1,8 +1,13 @@
 package bemsih.databaslaboration1.Controller;
 
 import bemsih.databaslaboration1.Model.*;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import org.bson.types.ObjectId;
 
 import java.sql.*;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -25,6 +30,48 @@ public class BooksDbController implements BooksDbInterface {
         this.executorService = Executors.newCachedThreadPool();
     }
 
+    @Override
+    public void initializeDefaultUser() throws BooksDbException {
+        try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+            var database = mongoClient.getDatabase("Laboration1");
+            var usersCollection = database.getCollection("users");
+
+            // Kontrollera om standardanvändaren redan finns
+            var existingUser = usersCollection.find(com.mongodb.client.model.Filters.eq("userName", "admin")).first();
+
+            if (existingUser == null) {
+                // Skapa standardanvändare
+                var userDoc = new org.bson.Document()
+                        .append("userName", "bmt127")
+                        .append("password", "123"); // Använd en starkare standardlösning i en riktig applikation
+
+                usersCollection.insertOne(userDoc);
+                System.out.println("Default user 'admin' created with password 'admin123'.");
+            } else {
+                System.out.println("Default user 'admin' already exists.");
+            }
+        } catch (Exception e) {
+            throw new BooksDbException("Error initializing default user.", e);
+        }
+    }
+
+    public String getUserNameById(ObjectId userId) throws BooksDbException {
+        try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+            var database = mongoClient.getDatabase("Laboration1");
+            var usersCollection = database.getCollection("users");
+
+            var userDoc = usersCollection.find(Filters.eq("_id", userId)).first();
+            if (userDoc != null) {
+                return userDoc.getString("userName");
+            } else {
+                throw new BooksDbException("Användare kunde inte hittas med ID: " + userId);
+            }
+        } catch (Exception e) {
+            throw new BooksDbException("Fel vid hämtning av användarnamn", e);
+        }
+    }
+
+
     /**
      * Retrieves a list of books that match the given title.
      *
@@ -36,40 +83,36 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public List<Book> getBooksByTitle(String title) throws BooksDbException {
         Callable<List<Book>> task = () -> {
-            String query = "SELECT book_id, title, publishingDate, ISBN FROM BOOK WHERE title LIKE ?";
-            ArrayList<Book> books = new ArrayList<>();
+            List<Book> books = new ArrayList<>();
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var collection = database.getCollection("books");
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(query)) {
+                // Använd en regex-sökning för att matcha titeln
+                var query = com.mongodb.client.model.Filters.regex("title", ".*" + title + ".*", "i");
+                var results = collection.find(query);
 
-                stmt.setString(1, "%" + title + "%");
-
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        Book book = new Book(
-                                rs.getInt("book_id"),
-                                rs.getString("title"),
-                                rs.getDate("publishingDate").toLocalDate(),
-                                rs.getLong("ISBN")
-                        );
-                        books.add(book);
-                    }
+                for (var doc : results) {
+                    books.add(new Book(
+                            doc.getString("title"),
+                            doc.getDate("publishingDate").toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
+                            doc.getLong("ISBN")
+                    ));
                 }
-
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 throw new BooksDbException("Error fetching books by title: " + title, e);
             }
-
             return books;
         };
 
         try {
             Future<List<Book>> future = executorService.submit(task);
-            return future.get(); // Blocking call to wait for the result
+            return future.get(); // Vänta tills resultatet är tillgängligt
         } catch (Exception e) {
             throw new BooksDbException("Error executing background task for fetching books by title.", e);
         }
     }
+
 
     /**
      * Retrieves a list of books authored by a person with the given name.
@@ -83,43 +126,49 @@ public class BooksDbController implements BooksDbInterface {
     public List<Book> getBooksByAuthor(String authorName) throws BooksDbException {
         Callable<List<Book>> task = () -> {
             List<Book> books = new ArrayList<>();
-            String query = """
-                SELECT b.book_id, b.title, b.publishingDate, b.ISBN
-                FROM BOOK b
-                JOIN BOOK_AUTHOR ba ON b.book_id = ba.book_id
-                JOIN AUTHOR a ON ba.author_id = a.author_id
-                WHERE CONCAT(a.firstName, ' ', a.lastName) LIKE ?
-                """;
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var booksCollection = database.getCollection("books");
+                var authorsCollection = database.getCollection("authors");
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(query)) {
-                stmt.setString(1, "%" + authorName + "%");
+                // Hitta författare vars namn matchar
+                var authorQuery = com.mongodb.client.model.Filters.regex(
+                        "fullName", ".*" + authorName + ".*", "i"
+                );
+                var authors = authorsCollection.find(authorQuery);
 
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        Book book = new Book(
-                                rs.getInt("book_id"),
-                                rs.getString("title"),
-                                rs.getDate("publishingDate").toLocalDate(),
-                                rs.getLong("ISBN")
-                        );
-                        books.add(book);
-                    }
+                // Extrahera deras ObjectId
+                List<ObjectId> authorIds = new ArrayList<>();
+                for (var doc : authors) {
+                    authorIds.add(doc.getObjectId("_id"));
                 }
-            } catch (SQLException e) {
+
+                // Hitta böcker kopplade till dessa författare
+                var bookQuery = com.mongodb.client.model.Filters.in("authorIds", authorIds);
+                var results = booksCollection.find(bookQuery);
+
+                for (var doc : results) {
+                    books.add(new Book(
+                            doc.getString("title"),
+                            doc.getDate("publishingDate").toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
+                            doc.getLong("ISBN")
+                    ));
+                }
+            } catch (Exception e) {
                 throw new BooksDbException("Error fetching books by author: " + authorName, e);
             }
-
             return books;
         };
 
         try {
             Future<List<Book>> future = executorService.submit(task);
-            return future.get();
+            return future.get(); // Vänta tills resultatet är tillgängligt
         } catch (Exception e) {
             throw new BooksDbException("Error executing background task for fetching books by author.", e);
         }
     }
+
+
 
     /**
      * Retrieves a list of books belonging to a specific genre.
@@ -132,33 +181,25 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public List<Book> getBooksByGenre(String genreName) throws BooksDbException {
         Callable<List<Book>> task = () -> {
-            String query = """
-                SELECT DISTINCT b.book_id, b.title, b.publishingDate, b.ISBN
-                FROM BOOK b
-                JOIN BOOK_GENRE bg ON b.book_id = bg.book_id
-                JOIN GENRE g ON bg.genre_id = g.genre_id
-                WHERE g.genreName LIKE ? """;
             List<Book> books = new ArrayList<>();
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var booksCollection = database.getCollection("books");
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(query)) {
-                stmt.setString(1, "%" + genreName + "%");
+                // Filtrera böcker med det givna genrenamnet
+                var query = com.mongodb.client.model.Filters.regex("genres", ".*" + genreName + ".*", "i");
+                var results = booksCollection.find(query);
 
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        Book book = new Book(
-                                rs.getInt("book_id"),
-                                rs.getString("title"),
-                                rs.getDate("publishingDate").toLocalDate(),
-                                rs.getLong("ISBN")
-                        );
-                        books.add(book);
-                    }
+                for (var doc : results) {
+                    books.add(new Book(
+                            doc.getString("title"),
+                            doc.getDate("publishingDate").toInstant().atZone(ZoneId.systemDefault()).toLocalDate(),
+                            doc.getLong("ISBN")
+                    ));
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 throw new BooksDbException("Error fetching books by genre: " + genreName, e);
             }
-
             return books;
         };
 
@@ -169,6 +210,8 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching books by genre.", e);
         }
     }
+
+
     /**
      * Adds a rating for a specific book by a user.
      *
@@ -180,31 +223,32 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public void addRating(Book book, User user, int ratingValue) throws BooksDbException {
         Callable<Void> task = () -> {
-            String query = "INSERT INTO RATING (book_id, user_id, rating_value) VALUES (?, ?, ?)";
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var ratingsCollection = database.getCollection("ratings");
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(query)) {
-                stmt.setInt(1, book.getBook_id());
-                stmt.setInt(2, user != null ? user.getUserId() : 1);
-                stmt.setInt(3, ratingValue);
+                // Skapa en rating-dokument
+                var ratingDoc = new org.bson.Document()
+                        .append("bookId", book.getBookId()) // Använd rätt metod eller fält från Book-klassen
+                        .append("userId", user.getUserId())
+                        .append("ratingValue", ratingValue);
 
-                int rowsAffected = stmt.executeUpdate();
-                if (rowsAffected == 0) {
-                    throw new BooksDbException("Failed to add rating. No rows affected.");
-                }
-            } catch (SQLException e) {
-                throw new BooksDbException("Error adding rating for book ID: " + book.getBook_id(), e);
+                ratingsCollection.insertOne(ratingDoc);
+            } catch (Exception e) {
+                throw new BooksDbException("Error adding rating for book ID: " + book.getBookId(), e);
             }
             return null;
         };
 
         try {
             Future<Void> future = executorService.submit(task);
-            future.get();
+            future.get(); // Vänta tills operationen slutförs
         } catch (Exception e) {
             throw new BooksDbException("Error executing background task for adding rating.", e);
         }
     }
+
+
     /**
      * Adds a new book along with its genres.
      *
@@ -216,48 +260,35 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public void addBook(Book book, List<Genre> genres, User user) throws BooksDbException {
         Callable<Void> task = () -> {
-            String bookInsertQuery = "INSERT INTO BOOK(title, publishingDate, ISBN, user_id) VALUES (?, ?, ?, ?)";
-            String genreInsertQuery = "INSERT INTO GENRE(genreName) VALUES (?)";
-            String bookGenreInsertQuery = "INSERT INTO BOOK_GENRE (book_id, genre_id) VALUES (?, ?)";
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var booksCollection = database.getCollection("books");
+                var genresCollection = database.getCollection("genres");
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement bookStmt = conn.prepareStatement(bookInsertQuery, Statement.RETURN_GENERATED_KEYS);
-                 PreparedStatement genreStmt = conn.prepareStatement(genreInsertQuery, Statement.RETURN_GENERATED_KEYS)) {
-
-                bookStmt.setString(1, book.getTitle());
-                bookStmt.setDate(2, Date.valueOf(book.getDate()));
-                bookStmt.setLong(3, book.getISBN());
-                bookStmt.setInt(4, user.getUserId());
-                bookStmt.executeUpdate();
-
-                try (ResultSet generatedKeys = bookStmt.getGeneratedKeys()) {
-                    if (generatedKeys.next()) {
-                        book.setBook_id(generatedKeys.getInt(1));
-                    } else {
-                        throw new BooksDbException("Failed to retrieve generated book ID.");
-                    }
-                }
-
+                // Skapa genrer i databasen om de inte redan finns
+                List<String> genreIds = new ArrayList<>();
                 for (Genre genre : genres) {
-                    genreStmt.setString(1, genre.getGenreName());
-                    genreStmt.executeUpdate();
-
-                    try (ResultSet generatedKeys = genreStmt.getGeneratedKeys()) {
-                        if (generatedKeys.next()) {
-                            genre.setGenreId(generatedKeys.getInt(1));
-                        } else {
-                            throw new BooksDbException("Failed to retrieve generated genre ID.");
-                        }
-                    }
-
-                    try (PreparedStatement bookGenreStmt = conn.prepareStatement(bookGenreInsertQuery)) {
-                        bookGenreStmt.setInt(1, book.getBook_id());
-                        bookGenreStmt.setInt(2, genre.getGenreId());
-                        bookGenreStmt.executeUpdate();
+                    var existingGenre = genresCollection.find(com.mongodb.client.model.Filters.eq("name", genre.getGenreName())).first();
+                    if (existingGenre == null) {
+                        var genreDoc = new org.bson.Document().append("name", genre.getGenreName());
+                        genresCollection.insertOne(genreDoc);
+                        genreIds.add(genreDoc.getObjectId("_id").toHexString());
+                    } else {
+                        genreIds.add(existingGenre.getObjectId("_id").toHexString());
                     }
                 }
-            } catch (SQLException e) {
-                throw new BooksDbException("Error adding book and genres", e);
+
+                // Lägg till boken i databasen
+                var bookDoc = new org.bson.Document()
+                        .append("title", book.getTitle())
+                        .append("publishingDate", java.util.Date.from(book.getPublicationDate().atStartOfDay(ZoneId.systemDefault()).toInstant())) // Ändrat till getPublicationDate
+                        .append("ISBN", book.getISBN())
+                        .append("userId", user.getUserId())
+                        .append("genres", genreIds);
+
+                booksCollection.insertOne(bookDoc);
+            } catch (Exception e) {
+                throw new BooksDbException("Error adding book and genres.", e);
             }
             return null;
         };
@@ -269,6 +300,8 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding book.", e);
         }
     }
+
+
     /**
      * Adds a book with its authors and genres.
      *
@@ -281,40 +314,34 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public void addBookWithAuthors(Book book, List<Author> authors, List<Genre> genres, User user) throws BooksDbException {
         Callable<Void> task = () -> {
-            addBook(book, genres, user);
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var booksCollection = database.getCollection("books");
+                var authorsCollection = database.getCollection("authors");
 
-            String authorInsertQuery = "INSERT INTO AUTHOR(firstName, lastName, dateOfBirth, user_id) VALUES (?, ?, ?, ?)";
-            String bookAuthorInsertQuery = "INSERT INTO BOOK_AUTHOR (book_id, author_id) VALUES (?, ?)";
+                // Lägg till boken
+                var bookDoc = new org.bson.Document()
+                        .append("title", book.getTitle())
+                        .append("publishingDate", java.util.Date.from(book.getPublicationDate().atStartOfDay(ZoneId.systemDefault()).toInstant())) // Ändrat till getPublicationDate
+                        .append("ISBN", book.getISBN())
+                        .append("userId", user.getUserId())
+                        .append("genres", genres.stream().map(Genre::getGenreName).toList());
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement authorStmt = conn.prepareStatement(authorInsertQuery, Statement.RETURN_GENERATED_KEYS);
-                 PreparedStatement bookAuthorStmt = conn.prepareStatement(bookAuthorInsertQuery)) {
+                booksCollection.insertOne(bookDoc);
+                var bookId = bookDoc.getObjectId("_id");
 
-                conn.setAutoCommit(false);
-
+                // Lägg till författare och koppla till boken
                 for (Author author : authors) {
-                    authorStmt.setString(1, author.getFirstName());
-                    authorStmt.setString(2, author.getLastName());
-                    authorStmt.setDate(3, author.getDateOfBirth() != null ? Date.valueOf(author.getDateOfBirth()) : null);
-                    authorStmt.setInt(4, user.getUserId());
-                    authorStmt.executeUpdate();
+                    var authorDoc = new org.bson.Document()
+                            .append("firstName", author.getFirstName())
+                            .append("lastName", author.getLastName())
+                            .append("dateOfBirth", java.util.Date.from(author.getDateOfBirth().atStartOfDay(ZoneId.systemDefault()).toInstant()))
+                            .append("bookIds", List.of(bookId));
 
-                    try (ResultSet generatedKeys = authorStmt.getGeneratedKeys()) {
-                        if (generatedKeys.next()) {
-                            author.setAuthor_id(generatedKeys.getInt(1));
-                        } else {
-                            throw new BooksDbException("Failed to retrieve generated author ID.");
-                        }
-                    }
-
-                    bookAuthorStmt.setInt(1, book.getBook_id());
-                    bookAuthorStmt.setInt(2, author.getAuthor_id());
-                    bookAuthorStmt.executeUpdate();
+                    authorsCollection.insertOne(authorDoc);
                 }
-
-                conn.commit();
-            } catch (SQLException e) {
-                throw new BooksDbException("Error adding authors and relations", e);
+            } catch (Exception e) {
+                throw new BooksDbException("Error adding book with authors.", e);
             }
             return null;
         };
@@ -326,6 +353,8 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding book with authors.", e);
         }
     }
+
+
     /**
      * Retrieves a user by their ID.
      *
@@ -336,20 +365,20 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public User getUserById(int userId) throws BooksDbException {
         Callable<User> task = () -> {
-            String query = "SELECT user_id, userName, passWord FROM USER WHERE user_id = ?";
-            try (Connection connection = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = connection.prepareStatement(query)) {
-                stmt.setInt(1, userId);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        return new User(
-                                rs.getString("userName"),
-                                rs.getInt("user_id"),
-                                rs.getString("passWord")
-                        );
-                    }
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var usersCollection = database.getCollection("users");
+
+                var query = com.mongodb.client.model.Filters.eq("userId", userId);
+                var userDoc = usersCollection.find(query).first();
+
+                if (userDoc != null) {
+                    return new User(
+                            userDoc.getString("userName"),
+                            userDoc.getString("password") // Endast två parametrar används här
+                    );
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 throw new BooksDbException("Error fetching user by ID: " + userId, e);
             }
             return null;
@@ -362,6 +391,8 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching user by ID.", e);
         }
     }
+
+
     /**
      * Retrieves a user by their username.
      *
@@ -372,20 +403,20 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public User getUserByUsername(String username) throws BooksDbException {
         Callable<User> task = () -> {
-            String query = "SELECT user_id, userName, passWord FROM USER WHERE userName = ?";
-            try (Connection connection = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = connection.prepareStatement(query)) {
-                stmt.setString(1, username);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        return new User(
-                                rs.getString("userName"),
-                                rs.getInt("user_id"),
-                                rs.getString("passWord")
-                        );
-                    }
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var usersCollection = database.getCollection("users");
+
+                var query = com.mongodb.client.model.Filters.eq("userName", username);
+                var userDoc = usersCollection.find(query).first();
+
+                if (userDoc != null) {
+                    return new User(
+                            userDoc.getString("userName"),
+                            userDoc.getString("password") // Endast två parametrar
+                    );
                 }
-            } catch (SQLException e) {
+            } catch (Exception e) {
                 throw new BooksDbException("Error fetching user by username: " + username, e);
             }
             return null;
@@ -398,6 +429,7 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for fetching user by username.", e);
         }
     }
+
     /**
      * Validates a user's credentials.
      *
@@ -409,29 +441,29 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public boolean validateUser(String username, String password) throws BooksDbException {
         Callable<Boolean> task = () -> {
-            String query = "SELECT COUNT(*) AS count FROM USER WHERE userName = ? AND passWord = ?";
-            try (Connection connection = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = connection.prepareStatement(query)) {
-                stmt.setString(1, username);
-                stmt.setString(2, password);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        return rs.getInt("count") > 0;
-                    }
-                }
-            } catch (SQLException e) {
-                throw new BooksDbException("Error validating user", e);
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var usersCollection = database.getCollection("users");
+
+                var query = com.mongodb.client.model.Filters.and(
+                        com.mongodb.client.model.Filters.eq("userName", username),
+                        com.mongodb.client.model.Filters.eq("password", password)
+                );
+
+                return usersCollection.find(query).first() != null;
+            } catch (Exception e) {
+                throw new BooksDbException("Error validating user credentials.", e);
             }
-            return false;
         };
 
         try {
             Future<Boolean> future = executorService.submit(task);
             return future.get();
         } catch (Exception e) {
-            throw new BooksDbException("Error executing background task for validating user.", e);
+            throw new BooksDbException("Error executing background task for validating user credentials.", e);
         }
     }
+
     /**
      * Adds a review for a book by a user, along with a rating.
      *
@@ -444,39 +476,28 @@ public class BooksDbController implements BooksDbInterface {
     @Override
     public void addReview(Book book, User user, String reviewText, int ratingValue) throws BooksDbException {
         Callable<Void> task = () -> {
-            String addRatingQuery = "INSERT INTO RATING (book_id, user_id, rating_value) VALUES (?, ?, ?)";
-            String addReviewQuery = "INSERT INTO REVIEW (review_text, book_id, user_id, rating_id) VALUES (?, ?, ?, ?)";
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var reviewsCollection = database.getCollection("reviews");
+                var ratingsCollection = database.getCollection("ratings");
 
-            try (Connection conn = DatabaseConnection.getConnection()) {
-                conn.setAutoCommit(false);
+                // Lägg till betyg
+                var ratingDoc = new org.bson.Document()
+                        .append("bookId", book.getBookId()) // Använd rätt metod för att hämta bokens ID
+                        .append("userId", user.getUserId())
+                        .append("ratingValue", ratingValue);
+                ratingsCollection.insertOne(ratingDoc);
+                var ratingId = ratingDoc.getObjectId("_id");
 
-                int ratingId;
-                try (PreparedStatement ratingStmt = conn.prepareStatement(addRatingQuery, Statement.RETURN_GENERATED_KEYS)) {
-                    ratingStmt.setInt(1, book.getBook_id());
-                    ratingStmt.setInt(2, user.getUserId());
-                    ratingStmt.setInt(3, ratingValue);
-                    ratingStmt.executeUpdate();
-
-                    try (ResultSet generatedKeys = ratingStmt.getGeneratedKeys()) {
-                        if (generatedKeys.next()) {
-                            ratingId = generatedKeys.getInt(1);
-                        } else {
-                            throw new BooksDbException("Failed to retrieve generated rating ID.");
-                        }
-                    }
-                }
-
-                try (PreparedStatement reviewStmt = conn.prepareStatement(addReviewQuery)) {
-                    reviewStmt.setString(1, reviewText);
-                    reviewStmt.setInt(2, book.getBook_id());
-                    reviewStmt.setInt(3, user.getUserId());
-                    reviewStmt.setInt(4, ratingId);
-                    reviewStmt.executeUpdate();
-                }
-
-                conn.commit();
-            } catch (SQLException e) {
-                throw new BooksDbException("Error adding review and rating", e);
+                // Lägg till recension
+                var reviewDoc = new org.bson.Document()
+                        .append("reviewText", reviewText)
+                        .append("bookId", book.getBookId()) // Använd rätt metod för att hämta bokens ID
+                        .append("userId", user.getUserId())
+                        .append("ratingId", ratingId);
+                reviewsCollection.insertOne(reviewDoc);
+            } catch (Exception e) {
+                throw new BooksDbException("Error adding review and rating.", e);
             }
             return null;
         };
@@ -488,72 +509,92 @@ public class BooksDbController implements BooksDbInterface {
             throw new BooksDbException("Error executing background task for adding review.", e);
         }
     }
+
+
     /**
      * Deletes a book and all associated data (reviews, ratings, authors, genres) by its ID.
      *
      * @param bookId The ID of the book to delete.
      * @throws BooksDbException If an error occurs during database interaction.
      */
-    public void deleteBookById(int bookId) throws BooksDbException {
-        Callable<Void> task = () -> {
-            String deleteReviewsQuery = "DELETE FROM REVIEW WHERE book_id = ?";
-            String deleteRatingsQuery = "DELETE FROM RATING WHERE book_id = ?";
-            String deleteBookAuthorsQuery = "DELETE FROM BOOK_AUTHOR WHERE book_id = ?";
-            String deleteBookGenresQuery = "DELETE FROM BOOK_GENRE WHERE book_id = ?";
-            String deleteBookQuery = "DELETE FROM BOOK WHERE book_id = ?";
 
-            try (Connection conn = DatabaseConnection.getConnection()) {
-                conn.setAutoCommit(false); // Starta en transaktion
+    @Override
+    public void deleteBookById(String bookId) throws BooksDbException {
+        Callable<Void> task = () -> {
+            try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+                var database = mongoClient.getDatabase("Laboration1");
+                var booksCollection = database.getCollection("books");
+                var reviewsCollection = database.getCollection("reviews");
+                var ratingsCollection = database.getCollection("ratings");
+                var authorsCollection = database.getCollection("authors");
+                var genresCollection = database.getCollection("genres");
+
+                // Konvertera bookId till ObjectId
+                var objectId = new org.bson.types.ObjectId(bookId);
 
                 // Radera recensioner kopplade till boken
-                try (PreparedStatement stmt = conn.prepareStatement(deleteReviewsQuery)) {
-                    stmt.setInt(1, bookId);
-                    stmt.executeUpdate();
-                }
+                var reviewQuery = com.mongodb.client.model.Filters.eq("bookId", objectId);
+                reviewsCollection.deleteMany(reviewQuery);
 
                 // Radera betyg kopplade till boken
-                try (PreparedStatement stmt = conn.prepareStatement(deleteRatingsQuery)) {
-                    stmt.setInt(1, bookId);
-                    stmt.executeUpdate();
-                }
+                var ratingQuery = com.mongodb.client.model.Filters.eq("bookId", objectId);
+                ratingsCollection.deleteMany(ratingQuery);
 
-                // Radera författarkopplingar för boken
-                try (PreparedStatement stmt = conn.prepareStatement(deleteBookAuthorsQuery)) {
-                    stmt.setInt(1, bookId);
-                    stmt.executeUpdate();
-                }
+                // Ta bort författarkopplingar för boken
+                var authorQuery = com.mongodb.client.model.Filters.elemMatch("bookIds", com.mongodb.client.model.Filters.eq(objectId));
+                var updateAuthor = new org.bson.Document("$pull", new org.bson.Document("bookIds", objectId));
+                authorsCollection.updateMany(authorQuery, updateAuthor);
 
                 // Radera genrekopplingar för boken
-                try (PreparedStatement stmt = conn.prepareStatement(deleteBookGenresQuery)) {
-                    stmt.setInt(1, bookId);
-                    stmt.executeUpdate();
-                }
+                var genreQuery = com.mongodb.client.model.Filters.elemMatch("bookIds", com.mongodb.client.model.Filters.eq(objectId));
+                var updateGenre = new org.bson.Document("$pull", new org.bson.Document("bookIds", objectId));
+                genresCollection.updateMany(genreQuery, updateGenre);
 
                 // Radera själva boken
-                try (PreparedStatement stmt = conn.prepareStatement(deleteBookQuery)) {
-                    stmt.setInt(1, bookId);
-                    int rowsAffected = stmt.executeUpdate();
-
-                    if (rowsAffected == 0) {
-                        throw new BooksDbException("Ingen bok raderades. Kontrollera om bok-ID finns i databasen.");
-                    }
-                }
-
-                conn.commit(); // Bekräfta transaktionen
-            } catch (SQLException e) {
-                throw new BooksDbException("Fel vid radering av bok med ID: " + bookId, e);
+                var bookQuery = com.mongodb.client.model.Filters.eq("_id", objectId);
+                booksCollection.deleteOne(bookQuery);
+            } catch (Exception e) {
+                throw new BooksDbException("Error deleting book with ID: " + bookId, e);
             }
-
             return null;
         };
 
         try {
             Future<Void> future = executorService.submit(task);
-            future.get(); // Vänta på att bakgrundsprocessen slutförs
+            future.get();
         } catch (Exception e) {
-            throw new BooksDbException("Fel vid bakgrundsprocess för att radera bok.", e);
+            throw new BooksDbException("Error executing background task for deleting book.", e);
         }
     }
+
+    @Override
+    public List<Review> getReviewsByBookId(String bookId) throws BooksDbException {
+        try (var mongoClient = MongoClients.create("mongodb://localhost:27017")) {
+            var database = mongoClient.getDatabase("Laboration1");
+            var reviewsCollection = database.getCollection("reviews");
+
+            // Konvertera bookId från String till ObjectId
+            var objectId = new org.bson.types.ObjectId(String.valueOf(bookId));
+
+            var query = com.mongodb.client.model.Filters.eq("bookId", objectId);
+            var reviewDocs = reviewsCollection.find(query);
+
+            List<Review> reviews = new ArrayList<>();
+            for (var reviewDoc : reviewDocs) {
+                reviews.add(new Review(
+                        reviewDoc.getString("reviewText"),
+                        reviewDoc.getDate("reviewDate").toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime(),
+                        reviewDoc.getObjectId("bookId"),
+                        reviewDoc.getObjectId("userId"),
+                        reviewDoc.getObjectId("ratingId")
+                ));
+            }
+            return reviews;
+        } catch (Exception e) {
+            throw new BooksDbException("Error fetching reviews for book ID: " + bookId, e);
+        }
+    }
+
 
     /**
      * Retrieves a list of reviews for a book by its ID.
@@ -563,67 +604,7 @@ public class BooksDbController implements BooksDbInterface {
      * @throws BooksDbException If an error occurs during database interaction.
      */
 
-    @Override
-    public List<Review> getReviewsByBookId(int bookId) throws BooksDbException {
-        Callable<List<Review>> task = () -> {
-            String query = """
-            SELECT r.review_id, r.review_text, r.review_date, r.rating_id, u.user_id, u.userName,
-                   b.book_id, b.title, b.publishingDate, b.ISBN
-            FROM REVIEW r
-            JOIN USER u ON r.user_id = u.user_id
-            JOIN BOOK b ON r.book_id = b.book_id
-            WHERE r.book_id = ?
-        """;
-            List<Review> reviews = new ArrayList<>();
 
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement stmt = conn.prepareStatement(query)) {
-                stmt.setInt(1, bookId);
-
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        // Skapa en bokinstans
-                        Book book = new Book(
-                                rs.getInt("book_id"),
-                                rs.getString("title"),
-                                rs.getDate("publishingDate").toLocalDate(),
-                                rs.getLong("ISBN")
-                        );
-
-                        // Skapa en användarinstans
-                        User user = new User(
-                                rs.getString("userName"),
-                                rs.getInt("user_id"),
-                                null // Lösenord hämtas inte här
-                        );
-
-                        // Skapa en recension
-                        Review review = new Review(
-                                rs.getInt("review_id"),
-                                rs.getInt("rating_id"),
-                                user,
-                                book,
-                                rs.getTimestamp("review_date").toLocalDateTime(),
-                                rs.getString("review_text")
-                        );
-
-                        reviews.add(review);
-                    }
-                }
-            } catch (SQLException e) {
-                throw new BooksDbException("Error fetching reviews for book ID: " + bookId, e);
-            }
-
-            return reviews;
-        };
-
-        try {
-            Future<List<Review>> future = executorService.submit(task);
-            return future.get();
-        } catch (Exception e) {
-            throw new BooksDbException("Error executing background task for fetching reviews.", e);
-        }
-    }
 
 
     /**

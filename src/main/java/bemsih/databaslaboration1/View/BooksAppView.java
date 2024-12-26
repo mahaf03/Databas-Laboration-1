@@ -9,6 +9,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import org.bson.types.ObjectId;
 
 import java.sql.Connection;
 import java.time.LocalDate;
@@ -19,12 +20,17 @@ public class BooksAppView extends Application {
     private BooksDbController controller;
     private TableView<Book> tableView;
     private User loggedInUser;
+    private User user; // Lägg till detta om det saknas
+    private ObjectId userId; // Om du redan har detta
+
 
     @Override
     public void start(Stage primaryStage) {
-        try (Connection connection = DatabaseConnection.getConnection()) {
+        try {
             this.controller = new BooksDbController();
+            controller.initializeDefaultUser();// Initiera MongoDB-kontrollern
             this.tableView = new TableView<>();
+
 
             // Skapa UI-komponenter
             TextField searchField = new TextField();
@@ -64,7 +70,7 @@ public class BooksAppView extends Application {
                 }
 
                 try {
-                    List<Review> reviews = controller.getReviewsByBookId(selectedBook.getBook_id());
+                    List<Review> reviews = controller.getReviewsByBookId(selectedBook.getBookId());
                     if (reviews.isEmpty()) {
                         showAlert("Info", "Inga recensioner", "Den valda boken har inga recensioner.");
                     } else {
@@ -155,7 +161,7 @@ public class BooksAppView extends Application {
         confirmationAlert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 try {
-                    controller.deleteBookById(selectedBook.getBook_id());
+                    controller.deleteBookById(selectedBook.getBookId());
 
                     // Uppdatera tabellen
                     tableView.getItems().remove(selectedBook);
@@ -246,9 +252,9 @@ public class BooksAppView extends Application {
                 try {
                     // Skapa en lista med alla författare (inklusive den första)
                     List<Author> authors = new ArrayList<>();
-                    authors.add(new Author(0, firstName, lastName, dob));
+                    authors.add(new Author(firstName, lastName, dob));
                     authors.addAll(additionalAuthors);
-                    controller.addBookWithAuthors( new Book(0, title, publishDate, Long.parseLong(isbn)), authors, List.of(new Genre(0, genre)), loggedInUser);
+                    controller.addBookWithAuthors(new Book(title, publishDate, Long.parseLong(isbn)), authors, List.of(new Genre(genre)), loggedInUser);
                     showAlert("Success", "Bok tillagd", "Boken har lagts till.");
                 } catch (BooksDbException e) {
                     showAlert("Fel", "Bok kunde inte läggas till", e.getMessage());
@@ -296,7 +302,7 @@ public class BooksAppView extends Application {
                 }
 
                 // Lägg till författaren till listan
-                authors.add(new Author(0, firstName, lastName, dob));
+                authors.add(new Author(firstName, lastName, dob));
                 showAlert("Success", "Författare tillagd", "Författaren har lagts till.");
             }
             return null;
@@ -392,6 +398,7 @@ public class BooksAppView extends Application {
 
         dialog.showAndWait();
     }
+
     private void showReviewsDialog(List<Review> reviews) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Recensioner");
@@ -399,7 +406,14 @@ public class BooksAppView extends Application {
 
         VBox vBox = new VBox(10);
         for (Review review : reviews) {
-            Label userLabel = new Label("Användare: " + review.getUser().getUserName());
+            String userName = "Okänd användare"; // Default om användaren inte kan hittas
+            try {
+                userName = controller.getUserNameById(review.getUserId()); // Hämta användarnamn från databasen
+            } catch (BooksDbException e) {
+                e.printStackTrace(); // Logga fel för felsökning
+            }
+
+            Label userLabel = new Label("Användare: " + userName);
             Label dateLabel = new Label("Datum: " + review.getReviewDate().toString());
             Label ratingLabel = new Label("Betyg: " + review.getRatingId());
             Label reviewTextLabel = new Label("Recension: " + review.getReviewText());
@@ -410,6 +424,7 @@ public class BooksAppView extends Application {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
         dialog.showAndWait();
     }
+
 
 
     private void showAddReviewDialog() {
